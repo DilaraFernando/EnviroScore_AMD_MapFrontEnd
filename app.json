@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "EnviroScoreMap-AMD-App",
-    "slug": "EnviroScoreMap-AMD-App",
+    "slug": "enviroscoremapamdapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.dilarafernandezsteam.enviroscoremapamdapp"
     },
     "web": {
       "output": "static",
@@ -43,6 +44,13 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "79de1c4f-a6d7-43e4-9ee9-76b77498093b"
+      }
+    },
+    "owner": "dilara-fernandezs-team"
   }
 }
