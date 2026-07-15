@@ -10,9 +10,8 @@ import {
   Platform,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { useNavigation, useRoute, RouteProp } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import axios from "axios";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import api from "../../lib/api";
 
 interface WeatherData {
   temperature: number;
@@ -31,21 +30,16 @@ const SRI_LANKA_DISTRICTS = [
   "Moneragala", "Ratnapura", "Kegalle",
 ].sort();
 
-// Set this to your API base URL (env-based config recommended for RN, e.g. react-native-config)
-const API_URL = process.env.API_URL || "http://localhost:5000";
-
-type WeatherRouteParams = { districtName?: string };
-
 export default function WeatherPage() {
-  const navigation = useNavigation<any>();
-  const route = useRoute<RouteProp<Record<string, WeatherRouteParams>, string>>();
+  const router = useRouter();
+  const params = useLocalSearchParams<{ districtName?: string }>();
 
   const [data, setData] = useState<WeatherData | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<boolean>(false);
 
   // Fallback to colombo if parameter string is missing
-  const activeDistrict = route.params?.districtName || "colombo";
+  const activeDistrict = params.districtName || "colombo";
   const formattedDistrict = activeDistrict.charAt(0).toUpperCase() + activeDistrict.slice(1);
 
   useEffect(() => {
@@ -53,10 +47,7 @@ export default function WeatherPage() {
       setLoading(true);
       setError(false);
       try {
-        const token = await AsyncStorage.getItem("token");
-        const res = await axios.get(`${API_URL}/api/weather/analyze/${activeDistrict}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
+        const res = await api.get(`/weather/analyze/${activeDistrict}`);
         setData(res.data);
       } catch (err) {
         console.error("Error loading weather insights", err);
@@ -71,7 +62,7 @@ export default function WeatherPage() {
   // Handler to smoothly transition routes when a new district is selected
   const handleDistrictChange = (value: string) => {
     const selected = value.toLowerCase();
-    navigation.navigate("Weather", { districtName: selected });
+    router.setParams({ districtName: selected });
   };
 
   return (
@@ -79,7 +70,7 @@ export default function WeatherPage() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Top Header Bar */}
         <View style={styles.headerBar}>
-          <TouchableOpacity onPress={() => navigation.navigate("Dashboard")}>
+          <TouchableOpacity onPress={() => router.push("/(tabs)")}>
             <Text style={styles.backLink}>← DASHBOARD</Text>
           </TouchableOpacity>
 

@@ -7,6 +7,7 @@ import {
   StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { useAuth } from "../hooks/useAuth";
 
 type Stat = {
   value: string;
@@ -16,10 +17,16 @@ type Stat = {
 // No props required — navigation handled via expo-router's useRouter hook
 export default function Index() {
   const router = useRouter();
+  const { user } = useAuth();
 
-  // Cast as `any` until app/login.tsx and app/home.tsx exist —
-  // once those route files are added, Expo Router's typed routes
-  // will recognize them and you can drop the `as any`.
+  const handlePress = (targetPath: string) => {
+    if (user) {
+      router.push(targetPath as any);
+    } else {
+      router.push("/login" as any);
+    }
+  };
+
   const goToLogin = () => router.push("/login" as any);
   const goToHome = () => router.push("/home" as any);
 
@@ -40,13 +47,20 @@ export default function Index() {
           <Text style={styles.logoText}>EnviroScore-Map</Text>
         </View>
         <View style={styles.navbarRight}>
-          <TouchableOpacity onPress={goToLogin} style={styles.loginBtn}>
-            <Text style={styles.loginBtnText}>Login</Text>
-          </TouchableOpacity>
-          {/* Get Started now navigates straight to the Home page */}
-          <TouchableOpacity onPress={goToHome} style={styles.getStartedBtn}>
-            <Text style={styles.getStartedBtnText}>Get Started →</Text>
-          </TouchableOpacity>
+          {user ? (
+            <TouchableOpacity onPress={() => router.push("/(tabs)")} style={styles.getStartedBtn}>
+              <Text style={styles.getStartedBtnText}>Dashboard →</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity onPress={goToLogin} style={styles.loginBtn}>
+                <Text style={styles.loginBtnText}>Login</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={goToHome} style={styles.getStartedBtn}>
+                <Text style={styles.getStartedBtnText}>Get Started →</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
 
@@ -68,10 +82,10 @@ export default function Index() {
           zones, and visualise green resilience in real time.
         </Text>
         <View style={styles.heroButtonRow}>
-          <TouchableOpacity onPress={goToHome} style={styles.primaryBtn}>
+          <TouchableOpacity onPress={() => handlePress("/(tabs)")} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>Enter Platform →</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={goToLogin} style={styles.secondaryBtn}>
+          <TouchableOpacity onPress={() => handlePress("/map")} style={styles.secondaryBtn}>
             <Text style={styles.secondaryBtnText}>View Live Map</Text>
           </TouchableOpacity>
         </View>

@@ -19,7 +19,7 @@ const API = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 15000, // Increased timeout for production network latency
+  timeout: 15000,
 });
 
 /**
@@ -41,13 +41,12 @@ API.interceptors.request.use(async (config) => {
 });
 
 /**
- * Response Interceptor (Optional)
- * Useful for handling global errors like 401 Unauthorized
+ * Response Interceptor
+ * Handles global 401 errors by clearing stored token.
  */
 API.interceptors.response.use(
   (response) => response,
   (error) => {
-    // If the server returns 401, you could trigger a logout here
     if (error.response?.status === 401) {
       console.warn('Unauthorized - clearing token');
       AsyncStorage.removeItem('token');
@@ -55,5 +54,41 @@ API.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+// ─── Auth Endpoints ──────────────────────────────────────────────────────────
+
+export const authAPI = {
+  login: (email: string, password: string) =>
+    API.post('/auth/login', { email, password }),
+
+  register: (name: string, email: string, password: string, role: string) =>
+    API.post('/auth/register', { name, email, password, role }),
+
+  googleLogin: (accessToken: string, role: string = 'viewer') =>
+    API.post('/auth/google-login', { accessToken, role }),
+
+  getAllUsers: () => API.get('/auth/users'),
+};
+
+// ─── District Score Endpoints ────────────────────────────────────────────────
+
+export const scoreAPI = {
+  saveScore: (data: any) => API.post('/calculate/save', data),
+
+  getAllScores: () => API.get('/calculate/all'),
+
+  getScoreByDistrictId: (districtId: string) =>
+    API.get(`/calculate/${districtId}`),
+
+  deleteScoreByDistrictId: (districtId: string) =>
+    API.delete(`/calculate/${districtId}`),
+};
+
+// ─── Weather & AI Diagnostic Endpoints ───────────────────────────────────────
+
+export const weatherAPI = {
+  analyzeDistrict: (districtName: string) =>
+    API.get(`/weather/analyze/${districtName}`),
+};
 
 export default API;

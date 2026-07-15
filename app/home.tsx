@@ -6,13 +6,21 @@ import {
   ScrollView,
   StyleSheet,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
+import { useRouter } from "expo-router";
+import { useAuth } from "../hooks/useAuth";
 
-// No props required — navigation handled via useNavigation hook
+// No props required — navigation handled via useRouter hook
 export default function HomeScreen() {
-  const navigation = useNavigation();
+  const router = useRouter();
+  const { user } = useAuth();
 
-//   const goToLogin = () => navigation.navigate("Login");
+  const handlePress = (targetPath: string) => {
+    if (user) {
+      router.push(targetPath as any);
+    } else {
+      router.push("/login" as any);
+    }
+  };
 
   const stats = [
     { value: "26", label: "Districts Monitored" },
@@ -81,14 +89,22 @@ export default function HomeScreen() {
           </View>
           <Text style={styles.logoText}>EnviroScore-Map</Text>
         </View>
-        {/* <View style={styles.navbarRight}>
-          <TouchableOpacity onPress={goToLogin} style={styles.loginBtn}>
-            <Text style={styles.loginBtnText}>Login</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={goToLogin} style={styles.getStartedBtn}>
-            <Text style={styles.getStartedBtnText}>Get Started →</Text>
-          </TouchableOpacity>
-        </View> */}
+        <View style={styles.navbarRight}>
+          {user ? (
+            <TouchableOpacity onPress={() => router.push("/(tabs)")} style={styles.getStartedBtn}>
+              <Text style={styles.getStartedBtnText}>Dashboard →</Text>
+            </TouchableOpacity>
+          ) : (
+            <>
+              <TouchableOpacity onPress={() => router.push("/login")} style={styles.loginBtn}>
+                <Text style={styles.loginBtnText}>Login</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => router.push("/login")} style={styles.getStartedBtn}>
+                <Text style={styles.getStartedBtnText}>Get Started →</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </View>
 
       {/* HERO */}
@@ -108,14 +124,14 @@ export default function HomeScreen() {
           all 26 Sri Lankan districts. Simulate ecosystems, identify danger
           zones, and visualise green resilience in real time.
         </Text>
-        {/* <View style={styles.heroButtonRow}>
-          <TouchableOpacity onPress={goToLogin} style={styles.primaryBtn}>
+        <View style={styles.heroButtonRow}>
+          <TouchableOpacity onPress={() => handlePress("/(tabs)")} style={styles.primaryBtn}>
             <Text style={styles.primaryBtnText}>Enter Platform →</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={goToLogin} style={styles.secondaryBtn}>
+          <TouchableOpacity onPress={() => handlePress("/map")} style={styles.secondaryBtn}>
             <Text style={styles.secondaryBtnText}>View Live Map</Text>
           </TouchableOpacity>
-        </View> */}
+        </View>
       </View>
 
       {/* STATS STRIP */}
@@ -135,7 +151,7 @@ export default function HomeScreen() {
           {features.map((f) => (
             <TouchableOpacity
               key={f.title}
-            //   onPress={goToLogin}
+              onPress={() => handlePress(f.path === "Dashboard" ? "/(tabs)" : f.path === "Calculate" ? "/calculate" : "/map")}
               style={styles.featureCard}
               activeOpacity={0.8}
             >
@@ -178,12 +194,12 @@ export default function HomeScreen() {
       {/* CTA */}
       <View style={styles.section}>
         <TouchableOpacity
-        //   onPress={goToLogin}
+          onPress={() => handlePress("/(tabs)")}
           style={styles.ctaCard}
           activeOpacity={0.9}
         >
           <Text style={styles.ctaTitle}>
-            Ready to monitor Sri Lanka's ecosystems?
+            {"Ready to monitor Sri Lanka's ecosystems?"}
           </Text>
           <Text style={styles.ctaSubtitle}>
             Sign in to access the dashboard, calculator, and live interactive

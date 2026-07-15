@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { User } from '../types/index';
 
@@ -11,7 +11,17 @@ const applyAdminOverride = (u: User): User => {
   return u;
 };
 
-export const useAuth = () => {
+interface AuthContextType {
+  user: User | null;
+  loading: boolean;
+  login: (userData: User, token: string) => Promise<void>;
+  logout: () => Promise<void>;
+  updateUser: (updatedData: Partial<User>) => Promise<void>;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -39,7 +49,6 @@ export const useAuth = () => {
     };
   }, []);
 
-  // Syncs local state with updated user object from API
   const updateUser = useCallback(async (updatedData: Partial<User>) => {
     setUser((current) => {
       if (!current) return current;
@@ -73,5 +82,17 @@ export const useAuth = () => {
     setUser(null);
   }, []);
 
-  return { user, login, logout, updateUser, loading };
+  return (
+    <AuthContext.Provider value={{ user, loading, login, logout, updateUser }}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = () => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
 };

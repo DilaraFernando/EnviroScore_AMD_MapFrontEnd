@@ -12,19 +12,15 @@ import {
   ActivityIndicator,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import { useNavigation } from "@react-navigation/native";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import api from "../../lib/api";
-
-// Prop name matches what App passes: onLoginSuccess
-interface LoginProps {
-  onLoginSuccess: (userData: { username: string; role: string }) => void;
-}
+import { useRouter } from "expo-router";
+import { useAuth } from "../../hooks/useAuth";
+import { authAPI } from "../../lib/api";
 
 type Mode = "login" | "register";
 
-export default function Login({ onLoginSuccess }: LoginProps) {
-  const navigation = useNavigation<any>();
+export default function Login() {
+  const router = useRouter();
+  const { login } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [form, setForm] = useState({ username: "", email: "", password: "", role: "viewer" });
   const [loading, setLoading] = useState(false);
@@ -48,28 +44,56 @@ export default function Login({ onLoginSuccess }: LoginProps) {
 
     setLoading(true);
     try {
-      const endpoint = mode === "login" ? "/auth/login" : "/auth/register";
-
-      // Payload: 'username' mapped to 'name' to match backend model destructuring
-      const payload =
+      const res =
         mode === "login"
-          ? { email: form.email, password: form.password }
-          : { name: form.username, email: form.email, password: form.password, role: form.role };
+          ? await authAPI.login(form.email, form.password)
+          : await authAPI.register(form.username, form.email, form.password, form.role);
 
-      const res = await api.post(endpoint, payload);
       const { token, user } = res.data;
-
-      await AsyncStorage.setItem("token", token);
-
-      // Mapped from user.name to correctly match server response payload
-      onLoginSuccess({
-        username: user.name || user.username || "",
-        role: user.role,
-      });
-
-      navigation.navigate("Dashboard");
+      await login(user, token);
+      router.replace("/(tabs)");
     } catch (err: any) {
       setError(err.response?.data?.message || "Something went wrong. Try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const AuthSession = await import("expo-auth-session");
+
+      const discovery = {
+        authorizationEndpoint: "https://accounts.google.com/o/oauth2/v2/auth",
+        tokenEndpoint: "https://oauth2.googleapis.com/token",
+      };
+
+      const request = new AuthSession.AuthRequest({
+        clientId: process.env.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID || "",
+        scopes: ["openid", "profile", "email"],
+        redirectUri: AuthSession.makeRedirectUri({ scheme: "enviroscoremap" }),
+        responseType: AuthSession.ResponseType.IdToken,
+      });
+
+      const result = await request.promptAsync(discovery);
+
+      if (result.type === "success" && result.params?.id_token) {
+        const res = await authAPI.googleLogin(result.params.id_token);
+        const { token, user } = res.data;
+        await login(user, token);
+        router.replace("/(tabs)");
+      } else if (result.type === "cancel") {
+        // User cancelled
+      } else {
+        setError("Google authentication was interrupted. Please try again.");
+      }
+    } catch (err: any) {
+      console.warn("Google OAuth flow error:", err);
+      setError(
+        "Google Sign-In is not configured yet. Set up EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID in your .env to enable it."
+      );
     } finally {
       setLoading(false);
     }
@@ -91,7 +115,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
           keyboardShouldPersistTaps="handled"
         >
           {/* Logo */}
-          <TouchableOpacity style={styles.logoRow} onPress={() => navigation.navigate("Home")}>
+          <TouchableOpacity style={styles.logoRow} onPress={() => router.push("/home")}>
             <View style={styles.logoBadge}>
               <Text style={{ fontSize: 14 }}>🗺️</Text>
             </View>
@@ -123,6 +147,25 @@ export default function Login({ onLoginSuccess }: LoginProps) {
                   : "Register to start analysing Sri Lanka's ecosystems."}
               </Text>
             </View>
+
+            {/* Google Sign-In Button */}
+            {mode === "login" && (
+              <>
+                <TouchableOpacity
+                  style={styles.googleBtn}
+                  onPress={handleGoogleLogin}
+                  disabled={loading}
+                >
+                  <Text style={styles.googleBtnText}>G</Text>
+                  <Text style={styles.googleBtnLabel}>Sign in with Google</Text>
+                </TouchableOpacity>
+                <View style={styles.dividerRow}>
+                  <View style={styles.dividerLine} />
+                  <Text style={styles.dividerText}>OR</Text>
+                  <View style={styles.dividerLine} />
+                </View>
+              </>
+            )}
 
             <View style={{ gap: 12 }}>
               {mode === "register" && (
@@ -219,7 +262,7 @@ export default function Login({ onLoginSuccess }: LoginProps) {
             </View>
           </View>
 
-          <TouchableOpacity style={styles.backHome} onPress={() => navigation.navigate("Home")}>
+          <TouchableOpacity style={styles.backHome} onPress={() => router.push("/home")}>
             <Text style={styles.backHomeText}>← Back to Home</Text>
           </TouchableOpacity>
         </ScrollView>
@@ -274,6 +317,34 @@ const styles = StyleSheet.create({
   headingBlock: { marginBottom: 18 },
   heading: { fontSize: 20, fontWeight: "900", color: "#000" },
   subheading: { fontSize: 11, color: "#9ca3af", marginTop: 3 },
+
+  // Google Sign-In
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    backgroundColor: "#fff",
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    borderRadius: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    marginBottom: 4,
+  },
+  googleBtnText: {
+    fontSize: 16,
+    fontWeight: "900",
+    color: "#4285F4",
+  },
+  googleBtnLabel: { fontSize: 12, fontWeight: "700", color: "#374151" },
+  dividerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    marginVertical: 6,
+  },
+  dividerLine: { flex: 1, height: 1, backgroundColor: "#e5e7eb" },
+  dividerText: { fontSize: 9, fontWeight: "900", color: "#9ca3af", letterSpacing: 1 },
 
   label: { fontSize: 9, fontWeight: "900", color: "#9ca3af", letterSpacing: 1, marginBottom: 5 },
   input: {

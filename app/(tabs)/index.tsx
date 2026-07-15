@@ -9,23 +9,9 @@ import {
   Animated,
   Dimensions,
 } from "react-native";
-import { useNavigation } from "@react-navigation/native";
-
-interface DashboardProps {
-  user: { username: string; role: string } | null;
-  onLogout: () => void;
-}
-
-const DISTRICT_STATS = [
-  { name: "Colombo", score: 52, zone: "Yellow", trend: -2.1, temp: 29, condition: "Mostly Cloudy" },
-  { name: "Kalutara", score: 78, zone: "Green", trend: 1.4, temp: 28, condition: "Partly Cloudy" },
-  { name: "Galle", score: 71, zone: "Green", trend: 0.8, temp: 28, condition: "Light Rain" },
-  { name: "Jaffna", score: 34, zone: "Red", trend: -3.5, temp: 31, condition: "Sunny" },
-  { name: "Kandy", score: 67, zone: "Green", trend: 0.3, temp: 25, condition: "Cloudy" },
-  { name: "Anuradhapura", score: 39, zone: "Red", trend: -1.9, temp: 32, condition: "Sunny" },
-  { name: "Gampaha", score: 55, zone: "Yellow", trend: -0.7, temp: 29, condition: "Mostly Cloudy" },
-  { name: "Nuwara Eliya", score: 82, zone: "Green", trend: 2.1, temp: 18, condition: "Heavy Rain" },
-] as const;
+import { useRouter } from "expo-router";
+import { useAuth } from "../../hooks/useAuth";
+import { scoreAPI } from "../../lib/api";
 
 type Zone = "Green" | "Yellow" | "Red";
 
@@ -47,18 +33,96 @@ const ZONE_BG: Record<Zone, { bg: string; border: string }> = {
   Red: { bg: "#fff1f2", border: "#ffe4e6" },
 };
 
+// Static fallback data for districts that don't have saved backend scores
+const DISTRICT_DEFAULTS: Record<string, { score: number; zone: Zone; trend: number; temp: number; condition: string }> = {
+  Colombo: { score: 52, zone: "Yellow", trend: -2.1, temp: 29, condition: "Mostly Cloudy" },
+  Kalutara: { score: 78, zone: "Green", trend: 1.4, temp: 28, condition: "Partly Cloudy" },
+  Galle: { score: 71, zone: "Green", trend: 0.8, temp: 28, condition: "Light Rain" },
+  Jaffna: { score: 34, zone: "Red", trend: -3.5, temp: 31, condition: "Sunny" },
+  Kandy: { score: 67, zone: "Green", trend: 0.3, temp: 25, condition: "Cloudy" },
+  "Anuradhapura": { score: 39, zone: "Red", trend: -1.9, temp: 32, condition: "Sunny" },
+  Gampaha: { score: 55, zone: "Yellow", trend: -0.7, temp: 29, condition: "Mostly Cloudy" },
+  "Nuwara Eliya": { score: 82, zone: "Green", trend: 2.1, temp: 18, condition: "Heavy Rain" },
+};
+
+function computeZone(score: number): Zone {
+  return score >= 70 ? "Green" : score < 45 ? "Red" : "Yellow";
+}
+
+type DistrictStat = {
+  name: string;
+  score: number;
+  zone: Zone;
+  trend: number;
+  temp: number;
+  condition: string;
+};
+
 const { width: SCREEN_W } = Dimensions.get("window");
 const IS_TABLET = SCREEN_W >= 768;
 
-export default function Dashboard({ user, onLogout }: DashboardProps) {
-  const navigation = useNavigation<any>();
+export default function Dashboard() {
+  const router = useRouter();
+  const { user, logout } = useAuth();
   const [activeAlert, setActiveAlert] = useState(0);
-  const animatedWidths = useRef(DISTRICT_STATS.map(() => new Animated.Value(0))).current;
+  const [districtStats, setDistrictStats] = useState<DistrictStat[]>([]);
+  const animatedWidths = useRef<Animated.Value[]>([]).current;
 
-  const greenCount = DISTRICT_STATS.filter((d) => d.zone === "Green").length;
-  const yellowCount = DISTRICT_STATS.filter((d) => d.zone === "Yellow").length;
-  const redCount = DISTRICT_STATS.filter((d) => d.zone === "Red").length;
-  const avgScore = Math.round(DISTRICT_STATS.reduce((s, d) => s + d.score, 0) / DISTRICT_STATS.length);
+  // Fetch real scores from backend and merge with defaults
+  useEffect(() => {
+    scoreAPI
+      .getAllScores()
+      .then((res) => {
+        const merged: DistrictStat[] = Object.entries(DISTRICT_DEFAULTS).map(([name, fallback]) => {
+          const saved = res.data.find(
+            (item: any) => item.district.toLowerCase() === name.toLowerCase()
+          );
+          if (saved) {
+            return {
+              name: saved.district,
+              score: saved.score,
+              zone: computeZone(saved.score),
+              trend: 0,
+              temp: parseInt(saved.temp) || fallback.temp,
+              condition: fallback.condition,
+            };
+          }
+          return { name, ...fallback };
+        });
+        setDistrictStats(merged);
+      })
+      .catch(() => {
+        setDistrictStats(Object.entries(DISTRICT_DEFAULTS).map(([name, d]) => ({ name, ...d })));
+      });
+  }, []);
+
+  // Re-init animated widths when data changes
+  useEffect(() => {
+    animatedWidths.length = 0;
+    districtStats.forEach(() => animatedWidths.push(new Animated.Value(0)));
+    if (districtStats.length > 0) {
+      const timeout = setTimeout(() => {
+        const animations = districtStats.map((d, i) =>
+          Animated.timing(animatedWidths[i], {
+            toValue: d.score,
+            duration: 900,
+            delay: i * 80,
+            useNativeDriver: false,
+          })
+        );
+        Animated.parallel(animations).start();
+      }, 300);
+      return () => clearTimeout(timeout);
+    }
+  }, [districtStats]);
+
+  const greenCount = districtStats.filter((d) => d.zone === "Green").length;
+  const yellowCount = districtStats.filter((d) => d.zone === "Yellow").length;
+  const redCount = districtStats.filter((d) => d.zone === "Red").length;
+  const avgScore =
+    districtStats.length > 0
+      ? Math.round(districtStats.reduce((s, d) => s + d.score, 0) / districtStats.length)
+      : 0;
 
   const alerts: { district: string; msg: string; zone: Zone }[] = [
     { district: "Jaffna", msg: "Critical drought stress detected — score dropped to 34/100.", zone: "Red" },
@@ -67,34 +131,19 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
   ];
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      const animations = DISTRICT_STATS.map((d, i) =>
-        Animated.timing(animatedWidths[i], {
-          toValue: d.score,
-          duration: 900,
-          delay: i * 80,
-          useNativeDriver: false,
-        })
-      );
-      Animated.parallel(animations).start();
-    }, 300);
-    return () => clearTimeout(timeout);
-  }, []);
-
-  useEffect(() => {
     const interval = setInterval(() => {
       setActiveAlert((prev) => (prev + 1) % alerts.length);
     }, 3500);
     return () => clearInterval(interval);
-  }, []);
+  }, [alerts.length]);
 
   const alert = alerts[activeAlert];
 
   const navLinks = [
-    { label: "Overview", screen: "Dashboard" },
-    { label: "Calculate Score", screen: "Calculate" },
-    { label: "Interactive Map", screen: "Map" },
-    { label: "Weather Analytics", screen: "Weather", params: { districtName: "colombo" } },
+    { label: "Overview", path: "/(tabs)" },
+    { label: "Calculate Score", path: "/(tabs)/calculate" },
+    { label: "Interactive Map", path: "/(tabs)/map" },
+    { label: "Weather Analytics", path: "/(tabs)/weather?districtName=colombo" },
   ];
 
   const statCards = [
@@ -103,6 +152,11 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     { label: "At-Risk Zones", value: `${redCount}`, unit: " critical", icon: "⚠️", sub: "Immediate action needed", color: "#e11d48" },
     { label: "Active Data Nodes", value: "26", unit: " live", icon: "📡", sub: "Real-time monitoring" },
   ];
+
+  const handleLogout = async () => {
+    await logout();
+    router.replace("/login");
+  };
 
   return (
     <SafeAreaView style={styles.screen}>
@@ -117,10 +171,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </View>
           <View style={styles.userBlock}>
             <View style={{ alignItems: "flex-end" }}>
-              <Text style={styles.userName}>{user?.username || "Guest"}</Text>
+              <Text style={styles.userName}>{user?.name || "Guest"}</Text>
               <Text style={styles.userRole}>{user?.role || "Viewer"}</Text>
             </View>
-            <TouchableOpacity style={styles.logoutBtn} onPress={onLogout}>
+            <TouchableOpacity style={styles.logoutBtn} onPress={handleLogout}>
               <Text style={styles.logoutBtnText}>Logout</Text>
             </TouchableOpacity>
           </View>
@@ -131,10 +185,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             {navLinks.map((link) => (
               <TouchableOpacity
                 key={link.label}
-                onPress={() => navigation.navigate(link.screen, link.params)}
-                style={[styles.navLinkBtn, link.screen === "Dashboard" && styles.navLinkBtnActive]}
+                onPress={() => router.push(link.path as any)}
+                style={[styles.navLinkBtn, link.label === "Overview" && styles.navLinkBtnActive]}
               >
-                <Text style={[styles.navLinkText, link.screen === "Dashboard" && styles.navLinkTextActive]}>
+                <Text style={[styles.navLinkText, link.label === "Overview" && styles.navLinkTextActive]}>
                   {link.label}
                 </Text>
               </TouchableOpacity>
@@ -150,13 +204,13 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             {navLinks.map((link) => (
               <TouchableOpacity
                 key={link.label}
-                onPress={() => navigation.navigate(link.screen, link.params)}
+                onPress={() => router.push(link.path as any)}
                 style={[
                   styles.navLinkBtnMobile,
-                  link.screen === "Dashboard" && styles.navLinkBtnActive,
+                  link.label === "Overview" && styles.navLinkBtnActive,
                 ]}
               >
-                <Text style={[styles.navLinkText, link.screen === "Dashboard" && styles.navLinkTextActive]}>
+                <Text style={[styles.navLinkText, link.label === "Overview" && styles.navLinkTextActive]}>
                   {link.label}
                 </Text>
               </TouchableOpacity>
@@ -172,10 +226,10 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
             <Text style={[styles.pageTitle, styles.pageTitleMuted]}>Environmental Index</Text>
           </View>
           <View style={styles.headerBtnRow}>
-            <TouchableOpacity style={styles.primaryBtn} onPress={() => navigation.navigate("Calculate")}>
+            <TouchableOpacity style={styles.primaryBtn} onPress={() => router.push("/(tabs)/calculate")}>
               <Text style={styles.primaryBtnText}>+ Run Simulation</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.secondaryBtn} onPress={() => navigation.navigate("Map")}>
+            <TouchableOpacity style={styles.secondaryBtn} onPress={() => router.push("/(tabs)/map")}>
               <Text style={styles.secondaryBtnText}>View Live Map →</Text>
             </TouchableOpacity>
           </View>
@@ -242,28 +296,30 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
               <Text style={styles.eyebrowSmall}>DISTRICT PERFORMANCE</Text>
               <Text style={styles.panelSubTitle}>Live Eco-Score Index</Text>
             </View>
-            <TouchableOpacity onPress={() => navigation.navigate("Calculate")}>
+            <TouchableOpacity onPress={() => router.push("/(tabs)/calculate")}>
               <Text style={styles.runAnalysisLink}>Run Analysis →</Text>
             </TouchableOpacity>
           </View>
 
           <View style={{ gap: 12, marginTop: 6 }}>
-            {DISTRICT_STATS.map((d, i) => (
+            {districtStats.map((d, i) => (
               <View key={d.name} style={styles.districtRow}>
                 <Text style={styles.districtName}>{d.name}</Text>
                 <View style={styles.districtBarTrack}>
-                  <Animated.View
-                    style={[
-                      styles.districtBarFill,
-                      {
-                        backgroundColor: ZONE_HEX[d.zone as Zone],
-                        width: animatedWidths[i].interpolate({
-                          inputRange: [0, 100],
-                          outputRange: ["0%", "100%"],
-                        }),
-                      },
-                    ]}
-                  />
+                  {animatedWidths[i] && (
+                    <Animated.View
+                      style={[
+                        styles.districtBarFill,
+                        {
+                          backgroundColor: ZONE_HEX[d.zone as Zone],
+                          width: animatedWidths[i].interpolate({
+                            inputRange: [0, 100],
+                            outputRange: ["0%", "100%"],
+                          }),
+                        },
+                      ]}
+                    />
+                  )}
                 </View>
                 <Text style={styles.districtScore}>{d.score}</Text>
                 <Text style={[styles.districtTrend, { color: d.trend > 0 ? "#059669" : "#f43f5e" }]}>
